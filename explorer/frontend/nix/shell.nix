@@ -10,6 +10,7 @@ let
   ghc = pkgs.haskellPackages.ghcWithPackages (ps: [ps.turtle ps.hnix]);
 
 in
+  # This is an environment for running the frontend deps regeneration script.
   pkgs.stdenv.mkDerivation {
     name = "explorer-frontend-shell";
     buildInputs = with pkgs; [ nodePackages.bower2nix nodePackages.node2nix ghc coreutils ];

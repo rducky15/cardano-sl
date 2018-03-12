@@ -34,11 +34,11 @@ let
 
   bowerComponents = pkgs.buildBowerComponents {
     name = "cardano-sl-explorer-frontend-deps";
-    generated = ./bower-generated.nix;
+    generated = ./nix/bower-generated.nix;
     inherit src;
   };
 
-  nodePackages = import ./composition.nix {
+  nodePackages = import ./nix/composition.nix {
     inherit pkgs system;
     inherit src;
   };
@@ -47,7 +47,7 @@ let
   # Needs to use something off 17.03 branch.
   oldHaskellPackages = (import (fetchTarball https://github.com/NixOS/nixpkgs/archive/cb90e6a0361554d01b7a576af6c6fae4c28d7513.tar.gz) {}).pkgs.haskell.packages.ghc802.override {
     overrides = self: super: {
-      purescript-derive-lenses = oldHaskellPackages.callPackage ./purescript-derive-lenses.nix {};
+      purescript-derive-lenses = oldHaskellPackages.callPackage ./nix/purescript-derive-lenses.nix {};
     };
   };
 

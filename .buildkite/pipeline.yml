@@ -24,7 +24,7 @@ steps:
     agents:
       system: x86_64-linux
 
-  - label: 'bower2nix and node2nix'
-    command: 'scripts/ci/nix-shell.sh --run "cd explorer/frontend && ./scripts/regen.hs --test"'
+  - label: 'explorer frontend: checking generated dependencies'
+    command: 'scripts/ci/nix-shell.sh --run "cd explorer/frontend && ./nix/generate-frontend-deps.hs --test"'
     agents:
       system: x86_64-linux

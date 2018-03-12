@@ -1,5 +1,5 @@
 #! /usr/bin/env nix-shell
-#! nix-shell regen-shell.nix -i runhaskell
+#! nix-shell shell.nix -i runhaskell
 {-# LANGUAGE OverloadedStrings, LambdaCase #-}
 
 import Prelude hiding (FilePath)
