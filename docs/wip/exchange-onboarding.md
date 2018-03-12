@@ -8,7 +8,8 @@ Table of Contents
    * [Mainnet Wallet](#mainnet-wallet)
       * [Backup local state](#backup-local-state)
       * [Fetch latest code](#fetch-latest-code)
-      * [Build and run](#build-and-run)
+      * [Build and run in the nix store](#build-and-run-in-the-nix-store)
+      * [Build and run a docker image](#build-and-run-a-docker-image)
       * [Usage FAQs](#usage-faqs)
          * [How do I customize the wallet configuration?](#how-do-i-customize-the-wallet-configuration)
          * [How do I know when the wallet has fetched all the blocks?](#how-do-i-know-when-the-wallet-has-fetched-all-the-blocks)
@@ -74,7 +75,7 @@ expected.
 
     git rev-parse HEAD
 
-## Build and run
+## Build and run in the nix store
 
 By default the wallet's local state goes in
 `./state-wallet-mainnet`. If you prefer to have this sensitive data
@@ -89,6 +90,29 @@ mainnet.
 After the build finishes the generated connection script is
 available as a symlink called `./launch_2018-01-30_0d4f79eea`, or
 similar. Run that symlink as a script to start the wallet.
+
+## Build and run a docker image
+
+Follow the above instructions for customization and dependencies. To build a docker
+container and import the image run:
+
+    docker load < $(nix-build -A dockerImages.mainnetWallet))
+
+This will create an image `cardano-container-mainnet:latest`
+
+After this image is built, it can be used like any other docker image being pushed
+into a registry and pulled down using your preferred docker orchestration tool.
+
+The image can be ran using:
+
+    docker run --rm -it -p 127.0.0.1:8090:8090 -v cardano-state-1:/wallet cardano-container-mainnet:latest
+
+The above command will create a docker volume named `cardano-state-1` and will mount
+that to /wallet. Note: if no volume is mounted to `/wallet` the container startup
+script will refused to execute `cardano-node` and the container will exit.
+
+The location of `/wallet` cannot be changed, but you can mount any kind of volume
+you want in that directory that docker supports.
 
 ## Usage FAQs
 
