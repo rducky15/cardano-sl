@@ -4,6 +4,7 @@ in
 { system ? builtins.currentSystem
 , config ? {}
 , gitrev ? localLib.commitIdFromGitRepo ./.git
+, buildId ? null
 , pkgs ? (import (localLib.fetchNixPkgs) { inherit system config; })
 # profiling slows down performance by 50% so we don't enable it by default
 , enableProfiling ? false
@@ -111,5 +112,23 @@ let
       mainnetWallet = mkDocker { environment = "mainnet"; };
       stagingWallet = mkDocker { environment = "mainnet-staging"; };
     };
+
+    daedalus-bridge = pkgs.runCommand "cardano-daedalus-bridge" {} ''
+      # Generate daedalus-bridge
+      mkdir -p $out
+      cd $out
+      ${if buildId == null then "" else "echo ${buildId} > build-id"}
+      echo ${gitrev} > commit-id
+
+      cp ${./log-configs}/daedalus.yaml ./log-config-prod.yaml
+      cp ${./lib}/configuration.yaml .
+      cp ${./lib}/*genesis*.json .
+      cp ${cardanoPkgs.cardano-sl-tools}/bin/cardano-launcher .
+      cp ${cardanoPkgs.cardano-sl-wallet-new}/bin/cardano-node .
+
+      # test that binaries exit with 0
+      ./cardano-node --help > /dev/null
+      ./cardano-launcher --help > /dev/null
+    '';
   };
 in cardanoPkgs // other
