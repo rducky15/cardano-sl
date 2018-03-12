@@ -13,7 +13,7 @@ import qualified Data.Text as T
 import qualified Data.Map as M
 import System.IO (withFile, IOMode(WriteMode))
 import Filesystem.Path.CurrentOS (encodeString)
-import Data.Maybe (maybeToList, catMaybes)
+import Data.Maybe (maybeToList, mapMaybe)
 import qualified Control.Foldl as Fold
 import Data.Foldable (find)
 
@@ -169,7 +169,7 @@ bindingNames = cata phi
     phi _ = []
 
     names bs = ns ++ concat vs
-      where (ns, vs) = unzip . catMaybes . map nameValue $ bs
+      where (ns, vs) = unzip . mapMaybe nameValue $ bs
 
     -- gets the parts of a binding { name = value; }
     nameValue :: Binding r -> Maybe (Text, r)
