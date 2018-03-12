@@ -137,6 +137,9 @@ passSrc (Fix e) = Fix $ case e of
 
 
 -- | Replaces references to uglify-js version 3 with version 2.
+-- The build process won't work with version 3.
+-- For some reason it's not easy to make npm use version 2.
+-- Workaround is to tweak the generated packages.
 fixUglify :: NExpr -> NExpr
 fixUglify e = maybe e (flip replaceUglify e) (find isNew . bindingNames $ e)
   where
