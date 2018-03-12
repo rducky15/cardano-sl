@@ -27,8 +27,8 @@ main = do
 regen :: Shell ()
 regen = do
   echo "Regenerating nix for frontend"
-  bower2nix "bower.json" "bower-generated.nix"
-  node2nix "package.json" (Just "package-lock.json") "node-packages.nix"
+  bower2nix "bower.json" "nix/bower-generated.nix"
+  node2nix "package.json" (Just "package-lock.json") "nix/node-packages.nix"
 
 bower2nix :: FilePath -> FilePath -> Shell ()
 bower2nix src out = cachedShell [src] out $ \out' ->
@@ -37,22 +37,26 @@ bower2nix src out = cachedShell [src] out $ \out' ->
 node2nix :: FilePath -> Maybe FilePath -> FilePath -> Shell ()
 node2nix src lock out = cachedShell (src:maybeToList lock) out $ \out' -> do
   let composition = "composition.nix"
+      nodePackages = filename out
+      nix = directory out
   composition' <- mktempfile "." (tt composition)
   procs "node2nix" (["-6", "--development", "--input", tt src
                     , "--composition", tt composition'
-                    , "--output", tt out
+                    , "--output", tt nodePackages
                     ] ++ maybe [] (\l -> ["--lock", tt l]) lock) empty
-  liftIO $ fixNix (addSrcParam . changeSrc . fixUglify) out out'
-  liftIO $ fixNix (addSrcParam . passSrc) composition' composition
+  liftIO $ fixNix (addSrcParam . changeSrc . fixUglify) nodePackages out'
+  liftIO $ fixNix (addSrcParam . passSrc) composition' (nix </> composition)
+  rm nodePackages
+  mv "node-env.nix" (nix </> "node-env.nix")
 
 test :: Shell ()
 test = do
   echo "Checking that auto-generated frontend dependencies nix is up to date."
-  b <- needsChange ["bower.json"] "bower-generated.nix"
-  n <- needsChange ["package.json", "package-lock.json"] "node-packages.nix"
+  b <- needsChange ["bower.json"] "nix/bower-generated.nix"
+  n <- needsChange ["package.json", "package-lock.json"] "nix/node-packages.nix"
   when b $ echo " - bower-generated.nix needs update"
   when n $ echo " - node-packages.nix needs update"
-  when (b || n) $ die "Run explorer/frontend/scripts/regen.hs to fix this"
+  when (b || n) $ die "Consult explorer/frontend/README.md to fix this"
 
 optionsParser :: Parser Bool
 optionsParser = switch "test" 't' "Test freshness but don't regenerate"
