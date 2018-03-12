@@ -12,7 +12,7 @@ let
 in
   pkgs.stdenv.mkDerivation {
     name = "explorer-frontend-shell";
-    buildInputs = with pkgs; [ nodePackages.bower2nix nodePackages.node2nix ghc ];
+    buildInputs = with pkgs; [ nodePackages.bower2nix nodePackages.node2nix ghc coreutils ];
     shellHook = "eval $(egrep ^export ${ghc}/bin/ghc)";
     src = null;
   }

@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings, LambdaCase #-}
 
 import Prelude hiding (FilePath)
-import Turtle
+import Turtle hiding (find)
 import Nix.Parser
 import Nix.Expr
 import Nix.Pretty (prettyNix)
@@ -11,8 +11,11 @@ import Text.PrettyPrint.ANSI.Leijen (hPutDoc)
 import Data.Fix
 import qualified Data.Text as T
 import qualified Data.Map as M
-import System.IO (openFile, hClose, IOMode(WriteMode))
+import System.IO (withFile, IOMode(WriteMode))
 import Filesystem.Path.CurrentOS (encodeString)
+import Data.Maybe (maybeToList, catMaybes)
+import qualified Control.Foldl as Fold
+import Data.Foldable (find)
 
 main :: IO ()
 main = do
@@ -25,30 +28,28 @@ regen :: Shell ()
 regen = do
   echo "Regenerating nix for frontend"
   bower2nix "bower.json" "bower-generated.nix"
-  node2nix "package.json" "node-packages.nix"
+  node2nix "package.json" (Just "package-lock.json") "node-packages.nix"
 
 bower2nix :: FilePath -> FilePath -> Shell ()
-bower2nix src out = cachedShell src out $ \out' ->
+bower2nix src out = cachedShell [src] out $ \out' ->
   procs "bower2nix" [tt src, tt out'] empty
 
-node2nix :: FilePath -> FilePath -> Shell ()
-node2nix src out = cachedShell src out $ \out' -> do
+node2nix :: FilePath -> Maybe FilePath -> FilePath -> Shell ()
+node2nix src lock out = cachedShell (src:maybeToList lock) out $ \out' -> do
   let composition = "composition.nix"
-  out'' <- mktempfile "." (tt out)
   composition' <- mktempfile "." (tt composition)
-  procs "node2nix" ["-6", "-i", tt src, "-c", tt composition', "-o", tt out, "-d"] empty
-  cp out out''
-  liftIO $ fixNix composition' composition
-  liftIO $ fixNix out'' out'
-  inplace uglify2 out'
-  inplace srcAttr out'
-  inplace addSrcArg composition
+  procs "node2nix" (["-6", "--development", "--input", tt src
+                    , "--composition", tt composition'
+                    , "--output", tt out
+                    ] ++ maybe [] (\l -> ["--lock", tt l]) lock) empty
+  liftIO $ fixNix (addSrcParam . changeSrc . fixUglify) out out'
+  liftIO $ fixNix (addSrcParam . passSrc) composition' composition
 
 test :: Shell ()
 test = do
   echo "Checking that auto-generated frontend dependencies nix is up to date."
-  b <- needsChange "bower.json" "bower-generated.nix"
-  n <- needsChange "package.json" "node-packages.nix"
+  b <- needsChange ["bower.json"] "bower-generated.nix"
+  n <- needsChange ["package.json", "package-lock.json"] "node-packages.nix"
   when b $ echo " - bower-generated.nix needs update"
   when n $ echo " - node-packages.nix needs update"
   when (b || n) $ die "Run explorer/frontend/scripts/regen.hs to fix this"
@@ -60,70 +61,115 @@ optionsParser = switch "test" 't' "Test freshness but don't regenerate"
 
 -- | Run a shell command only if the destination file is out of date
 -- with respect to the source file.
-cachedShell :: FilePath -> FilePath -> (FilePath -> Shell ()) -> Shell ()
-cachedShell src dst action = needsChange src dst >>= \case
+cachedShell :: [FilePath] -> FilePath -> (FilePath -> Shell ()) -> Shell ()
+cachedShell srcs dst action = needsChange srcs dst >>= \case
   True -> do
     printf ("Generating " % fp % "\n") dst
     tmp <- mktempfile "." (tt $ basename dst)
     action tmp
     whenM (testpath dst) $ rm dst
-    input tmp & stampFile src & output dst
-  False -> printf (fp % " is already up to date according to " % fp % "\n") dst src
+    input tmp & stampFile srcs & output dst
+  False -> printf (fp % " is already up to date according to " % fp % "\n") dst (head srcs)
 
 -- | A file needs a change if its hash doesn't match or it doesn't exist.
-needsChange :: FilePath -> FilePath -> Shell Bool
-needsChange src dst = do
+needsChange :: [FilePath] -> FilePath -> Shell Bool
+needsChange srcs dst = do
   exists <- testfile dst
   if exists
     then do
-      line <- limit 1 $ input dst
-      hash <- limit 1 $ hashFile src
-      pure $ line /= hash
+      let stamps = flip fold Fold.list . limit (length srcs)
+      line <- stamps $ input dst
+      hash <- stamps $ hashFile srcs
+      pure $ or [ l /= h | (l, h) <- zip line hash ]
     else pure True
 
 -- | sha256sum output prepended with a nix line comment symbol
-hashFile :: FilePath -> Shell Line
-hashFile src = fmap ("# " <>) (inproc "sha256sum" [tt src] empty)
+hashFile :: [FilePath] -> Shell Line
+hashFile srcs = fmap ("# " <>) (inproc "sha256sum" (map tt srcs) empty)
 
 -- | Adds a hash to the top of the file
-stampFile :: FilePath -> Shell Line -> Shell Line
+stampFile :: [FilePath] -> Shell Line -> Shell Line
 stampFile ref f = cat [hashFile ref, f]
 
 ----------------------------------------------------------------------------
 
--- | Replace references to uglify version 3 with uglify version 2
-uglify2 :: Pattern Text
-uglify2 = text "sources." *> char '"' *> old *> star (notChar '"') *> char '"' *> pure new
-  where
-    old = "uglify-js-3."
-    new = "sources.\"uglify-js-2.8.29\""
-
--- | Inherit src attribute instead of using cwd
-srcAttr :: Pattern Text
-srcAttr = text "src = ./.;" *> pure "inherit src;"
-
--- | In the composition.nix file, add src to the arguments of node-packages.nix.
-addSrcArg :: Pattern Text
-addSrcArg = text "inherit nodeEnv" *> pure "inherit src nodeEnv"
+-- | Parse a nix file, apply fixup function to AST, write out nix file.
+fixNix :: (NExpr -> NExpr) -> FilePath -> FilePath -> IO ()
+fixNix fixup src dst = do
+  Success nix <- parseNixFile (encodeString src)
+  let doc = prettyNix (fixup nix)
+  withFile (encodeString dst) WriteMode $ \handle ->
+    hPutDoc handle doc
 
 ----------------------------------------------------------------------------
-
-fixNix :: FilePath -> FilePath -> IO ()
-fixNix src dst = do
-  Success nix <- parseNixFile (encodeString src)
-  let
-    nix' = addSrcParam nix
-    doc = prettyNix nix'
-  handle <- openFile (encodeString dst) WriteMode
-  hPutDoc handle doc
-  hClose handle
+-- Functions to modify nix expressions. These are quite complicated
+-- compared to sed patterns, but I wanted to see how well hnix works
+-- for transforming nix.
 
 -- | Adds a src argument to the top level of the file.
 addSrcParam :: NExpr -> NExpr
-addSrcParam (Fix e) = case e of
+addSrcParam (Fix e) = Fix $ case e of
   NAbs (ParamSet (FixedParamSet params) x) body ->
-    Fix $ NAbs (ParamSet (FixedParamSet (M.insert "src" Nothing params)) x) body
-  exp -> Fix exp
+    NAbs (ParamSet (FixedParamSet (M.insert "src" Nothing params)) x) body
+  exp -> exp
+
+-- | Replaces src = ./. with inherit src.
+changeSrc :: NExpr -> NExpr
+changeSrc (Fix e) = Fix $ case e of
+  NSet bs -> NSet (map changeSrcBinding bs)
+  exp     -> fmap changeSrc exp
+  where
+    changeSrcBinding :: Binding NExpr -> Binding NExpr
+    changeSrcBinding (NamedVar [StaticKey "src"] (Fix (NLiteralPath "./.")))
+      = Inherit Nothing [StaticKey "src"]
+    changeSrcBinding other = fmap changeSrc other
+
+-- | Adds src to list of arguments passed to node-packages.nix
+passSrc :: NExpr -> NExpr
+passSrc (Fix e) = Fix $ case e of
+  NApp (Fix (NApp (Fix (NSym "import"))
+             (Fix (NLiteralPath "./node-packages.nix"))))
+    (Fix (NSet attrs)) ->
+    NApp (Fix (NApp (Fix (NSym "import"))
+             (Fix (NLiteralPath "./node-packages.nix"))))
+    (Fix (NSet (Inherit Nothing [StaticKey "src"]:attrs)))
+  exp -> fmap passSrc exp
+
+
+-- | Replaces references to uglify-js version 3 with version 2.
+fixUglify :: NExpr -> NExpr
+fixUglify e = maybe e (flip replaceUglify e) (find isNew . bindingNames $ e)
+  where
+    isOld = T.isPrefixOf "uglify-js-3"
+    isNew = T.isPrefixOf "uglify-js-2"
+
+    -- replace sources."uglify-js-3.xxx" with sources."uglify-js-2.xxx"
+    replaceUglify :: Text -> NExpr -> NExpr
+    replaceUglify new (Fix e) = Fix $ case e of
+      NSelect (Fix (NSym "sources")) [DynamicKey (Plain (DoubleQuoted [Plain pkg]))] Nothing
+        | isOld pkg
+          -> NSelect (Fix (NSym "sources")) [DynamicKey (Plain (DoubleQuoted [Plain new]))] Nothing
+      exp -> fmap (replaceUglify new) exp
+
+-- big flat list of names of bindings { name = value; }
+bindingNames :: NExpr -> [Text]
+bindingNames = cata phi
+  where
+    phi (NSet bs) = names bs
+    phi (NList xs) = concat xs
+    phi (NAbs _ r) = r
+    phi (NLet bs r) = names bs ++ r
+    phi _ = []
+
+    names bs = ns ++ concat vs
+      where (ns, vs) = unzip . catMaybes . map nameValue $ bs
+
+    -- gets the parts of a binding { name = value; }
+    nameValue :: Binding r -> Maybe (Text, r)
+    nameValue (NamedVar [v] r) = case v of
+      StaticKey n -> Just (n, r)
+      DynamicKey (Plain (DoubleQuoted [Plain n])) -> Just (n, r)
+    nameValue (Inherit _ _) = Nothing
 
 ----------------------------------------------------------------------------
 
