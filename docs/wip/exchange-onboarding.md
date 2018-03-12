@@ -105,7 +105,7 @@ into a registry and pulled down using your preferred docker orchestration tool.
 
 The image can be ran using:
 
-    docker run --rm -it -p 127.0.0.1:8090:8090 -v cardano-state-1:/wallet cardano-container-mainnet:latest
+    docker run --rm -it -p 127.0.0.1:8090:8090 -p 127.0.0.1:8000:8000 -v cardano-state-1:/wallet cardano-container-mainnet:latest
 
 The above command will create a docker volume named `cardano-state-1` and will mount
 that to /wallet. Note: if no volume is mounted to `/wallet` the container startup
@@ -142,6 +142,13 @@ like
 If any of the recent matches are more than a slot lower than the
 latest epoch and slot reported by [Cardano Explorer](https://cardanoexplorer.com/), the wallet is
 still syncing.
+
+
+You can check the sync progress via the API and validate the local and network
+block counts match.
+
+    $ curl -k https://localhost:8090/api/settings/sync/progress
+    {"Right":{"_spLocalCD":{"getChainDifficulty":{"getBlockCount":733869}},"_spNetworkCD":{"getChainDifficulty":{"getBlockCount":733869}},"_spPeers":0}}%
 
 ### Where can I find the API documentation?
 
