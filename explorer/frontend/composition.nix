@@ -9,7 +9,8 @@ let
       inherit nodejs;
     };
     in import ./node-packages.nix {
+      inherit src;
       inherit (pkgs) fetchurl
       fetchgit;
-      inherit src nodeEnv;
+      inherit nodeEnv;
     }
