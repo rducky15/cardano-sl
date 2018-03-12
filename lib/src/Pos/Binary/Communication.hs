@@ -19,7 +19,7 @@ import           Pos.Binary.Core ()
 import           Pos.Block.BHelpers ()
 import           Pos.Block.Network (MsgBlock (..), MsgGetBlocks (..), MsgGetHeaders (..),
                                     MsgHeaders (..), MsgStream (..), MsgStreamStart (..),
-                                    MsgStreamUpdate (..))
+                                    MsgStreamUpdate (..), MsgStreamBlock (..))
 import           Pos.Communication.Types.Protocol (HandlerSpec (..), HandlerSpecs,
                                                    MsgSubscribe (..), MsgSubscribe1 (..),
                                                    VerInfo (..))
@@ -70,7 +70,7 @@ instance HasConfiguration => Bi MsgBlock where
 
 deriveSimpleBi ''MsgStreamStart [
     Cons 'MsgStreamStart [
-        Field [| mssFrom   :: HeaderHash |],
+        Field [| mssFrom   :: [HeaderHash] |],
         Field [| mssTo     :: HeaderHash |],
         Field [| mssWindow :: Word32 |]
     ]]
@@ -91,6 +91,21 @@ instance HasConfiguration => Bi MsgStream where
             0 -> MsgStart  <$> decode
             1 -> MsgUpdate <$> decode
             t -> cborError $ "MsgStream wrong tag: " <> show t
+
+instance HasConfiguration => Bi MsgStreamBlock where
+    encode = \case
+        (MsgStreamBlock b) -> encodeListLen 2 <> encode (0 :: Word8) <> encode b
+        (MsgStreamNoBlock t) -> encodeListLen 2 <> encode (1 :: Word8) <> encode t
+        MsgStreamEnd -> encodeListLen 2 <> encode (2 :: Word8)
+    decode = do
+        enforceSize "MsgBlock" 2
+        tag <- decode @Word8
+        case tag of
+            0 -> MsgStreamBlock <$> decode
+            1 -> MsgStreamNoBlock <$> decode
+            2 -> return MsgStreamEnd
+            t -> cborError $ "MsgStreamBlock wrong tag: " <> show t
+
 
 -- deriveSimpleBi is not happy with constructors without arguments
 -- "fake" deriving as per `MempoolMsg`.

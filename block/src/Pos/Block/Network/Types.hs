@@ -8,6 +8,7 @@ module Pos.Block.Network.Types
        , MsgStream (..)
        , MsgStreamStart (..)
        , MsgStreamUpdate (..)
+       , MsgStreamBlock (..)
        ) where
 
 import qualified Data.Text.Buildable
@@ -81,7 +82,7 @@ data MsgStream
     deriving (Eq, Show, Generic)
 
 data MsgStreamStart = MsgStreamStart
-    { mssFrom   :: !HeaderHash
+    { mssFrom   :: ![HeaderHash]
     , mssTo     :: !HeaderHash
     , mssWindow :: !Word32
     } deriving (Generic, Show, Eq)
@@ -89,4 +90,10 @@ data MsgStreamStart = MsgStreamStart
 data MsgStreamUpdate = MsgStreamUpdate
     { msuWindow :: !Word32
     } deriving (Generic, Show, Eq)
+
+data MsgStreamBlock
+    = MsgStreamBlock Block
+    | MsgStreamNoBlock Text
+    | MsgStreamEnd
+    deriving (Eq, Show, Generic)
 

@@ -26,7 +26,8 @@ import           Node.Conversation (Converse, converseWith, Conversation)
 import           System.Random (newStdGen)
 import           System.Wlog (WithLogger, CanLog, usingLoggerName)
 
-import           Pos.Block.Network (MsgGetHeaders, MsgHeaders, MsgGetBlocks, MsgBlock, MsgStream)
+import           Pos.Block.Network (MsgGetHeaders, MsgHeaders, MsgGetBlocks, MsgBlock, MsgStream,
+                                    MsgStreamBlock)
 import           Pos.Communication (NodeId, VerInfo (..), PeerData, PackingType,
                                     EnqueueMsg, makeEnqueueMsg, bipPacking, Listener,
                                     MkListeners (..), HandlerSpecs, InSpecs (..),
@@ -185,7 +186,7 @@ diffusionLayerFull runIO networkConfig lastKnownBlockVersion transport mEkgNodeM
                                                          (Proxy :: Proxy MsgGetHeaders)
                                                  ]
             streamBlockHeaderOuts = toOutSpecs [ convH (Proxy :: Proxy MsgStream)
-                                                       (Proxy :: Proxy MsgBlock)
+                                                       (Proxy :: Proxy MsgStreamBlock)
                                                ]
 
             -- Plainly mempty from the definition of allWorkers.

@@ -22,7 +22,7 @@ import           Serokell.Data.Memory.Units (Byte)
 import           Pos.Binary.Class (AsBinary (..))
 import           Pos.Block.Configuration (HasBlockConfiguration, recoveryHeadersMessage)
 import           Pos.Block.Network (MsgBlock (..), MsgGetBlocks (..), MsgGetHeaders (..),
-                                    MsgHeaders (..), MsgStream (..))
+                                    MsgHeaders (..), MsgStream (..), MsgStreamBlock (..))
 import           Pos.Communication.Types.Protocol (MsgSubscribe (..), MsgSubscribe1 (..))
 import           Pos.Communication.Types.Relay (DataMsg (..))
 import           Pos.Configuration (HasNodeConfiguration)
@@ -335,6 +335,9 @@ instance (HasAdoptedBlockVersionData m, Monad m) => MessageLimited MsgBlock m wh
         return $ MsgBlock <$> blkLimit
 
 instance (HasAdoptedBlockVersionData m, Monad m) => MessageLimited MsgStream m where
+    getMsgLenLimit _ = pure 0 -- XXX KK
+
+instance (HasAdoptedBlockVersionData m, Monad m) => MessageLimited MsgStreamBlock m where
     getMsgLenLimit _ = pure 0 -- XXX KK
 
 instance (HasConfiguration, Applicative m) => MessageLimited MsgGetHeaders m where
